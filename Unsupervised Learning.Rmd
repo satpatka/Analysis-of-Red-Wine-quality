@@ -1,0 +1,610 @@
+---
+title: "IS7036 Unsupervised Learning"
+author: "Keya Satpathy"
+output: html_document
+---
+
+## Cluster Wine Type by Descriptors  {.tabset .tabset-fade .tabset-pills}
+
+### Introduction {.tabset .tabset-fade}
+<div style="text-align: justify">
+
+<p>**Goal:** The data set that we are going to analyze in this project is a result of a chemical analysis of wines grown in a particular region but derived from different cultivars. Our goal is to try to group similar observations together and determine the number of possible clusters to help us make predictions and reduce dimensionality.</p>
+
+</div>
+
+#### About Data
+
+<div style="text-align: justify">
+
+<p>The red wine quality dataset can be found [here](https://www.kaggle.com/uciml/red-wine-quality-cortez-et-al-2009). This dataset is related to red variants of the Portuguese "Vinho Verde" wine. Due to privacy and logistic issues, only physicochemical and sensory variables are available and there is no data about grape types, wine brand, wine selling price, etc. This dataset has 1599 observations and 12 variables. The variables are given in the table below.</p>
+
+</div>
+
+<div>
+  <table class="table table-bordered table-striped">
+    <thead>
+        <tr>
+            <th align="justify">Variable</th>
+            <th align="justify">Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td align="justify">fixed acidity</td>
+            <td align="justify">Most acids involved with wine or fixed or nonvolatile (do not evaporate readily)</td>
+        </tr>
+        <tr>
+            <td align="justify">volatile acidity</td>
+            <td align="justify">The amount of acetic acid in wine, which at too high of levels can lead to an unpleasant, vinegar taste.</td>
+        </tr>
+        <tr>
+            <td align="justify">citric acid</td>
+            <td align="justify">Found in small quantities, citric acid can add 'freshness' and flavor to wines.</td>
+        </tr>
+        <tr>
+            <td align="justify">residual sugar</td>
+            <td align="justify">The amount of sugar remaining after fermentation stops, it's rare to find wines with less than 1 gram/liter and wines with greater than 45 grams/liter are considered sweet.</td>
+        </tr>
+        <tr>
+            <td align="justify">chlorides</td>
+            <td align="justify">The amount of salt in the wine.</td>
+        </tr>
+        <tr>
+            <td align="justify">free sulfur dioxide</td>
+            <td align="justify">The free form of SO2 exists in equilibrium between molecular SO2 (as a dissolved gas) and bisulfite ion; it prevents microbial growth and the oxidation of wine.</td>
+        </tr>
+        <tr>
+            <td align="justify">total sulfur dioxide</td>
+            <td align="justify">Amount of free and bound forms of S02; in low concentrations, SO2 is mostly undetectable in wine, but at free SO2 concentrations over 50 ppm, SO2 becomes evident in the nose and taste of wine.</td>
+        </tr>
+        <tr>
+            <td align="justify">density</td>
+            <td align="justify">The density of water is close to that of water depending on the percent alcohol and sugar content.</td>
+        </tr>
+        <tr>
+            <td align="justify">pH</td>
+            <td align="justify">Describes how acidic or basic a wine is on a scale from 0 (very acidic) to 14 (very basic); most wines are between 3-4 on the pH scale.</td>
+        </tr>
+        <tr>
+            <td align="justify">sulphates</td>
+            <td align="justify">A wine additive which can contribute to sulfur dioxide gas (S02) levels, wich acts as an antimicrobial and antioxidant.</td>
+        </tr>
+        <tr>
+            <td align="justify">alcohol</td>
+            <td align="justify">The percent alcohol content of the wine.</td>
+        </tr>
+        <tr>
+            <td align="justify">quality</td>
+            <td align="justify">Output variable (based on sensory data, score between 0 and 10).</td>
+        </tr>
+    </tbody>
+  </table>
+</div>
+
+<div style="text-align: justify">
+
+<p>*Original Citation: P. Cortez, A. Cerdeira, F. Almeida, T. Matos and J. Reis. Modeling wine preferences by data mining from physicochemical properties. In Decision Support Systems, Elsevier, 47(4):547-553, 2009.* </p>
+
+</div>
+
+#### Import and Explore Data
+
+<div style="text-align: justify">
+
+**Required Packages:**
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(corrplot)
+library(skimr)
+library(knitr)
+library(stringr)
+library(viridis)
+library(factoextra)
+library(hrbrthemes)
+library(tibble)
+library(forcats)
+library(mclust)
+library(fpc)
+library(LPCM)
+library(cluster)
+library(NbClust)
+library(funModeling)
+library(clValid)
+library(dbscan)
+library(plotly)
+```
+
+**Import Data using `read.csv()`:**
+
+```{r}
+set.seed(13232767)
+
+winequality <- read.csv("E:/MSIS/Spring 2020/Flex 2/IS 7036/winequality-red.csv", h=T)
+```
+
+<p>After importing, we analyze the basic structure and values in the dataset.</p>
+
+```{r}
+str(winequality)
+head(winequality)
+colnames(winequality)
+```
+
+<p>We will replace the spaces in variable names by an underscore.</p>
+
+```{r}
+colnames(winequality) <- winequality %>% colnames() %>% str_replace_all(" ","_")
+
+winequality <-  as.data.frame(winequality)
+
+str(winequality)
+```
+
+</div>
+
+### Exploratory Data Analysis
+
+<div style="text-align: justify">
+
+**Density Plot:**
+
+```{r}
+options(scipen = 999)
+
+density_winequality <- ggplot(winequality, aes(x = quality)) + geom_density()
+
+density_winequality + 
+  geom_vline(xintercept = 5, col = "red", size = 2) + 
+  geom_vline(xintercept = 6, col = "blue", size = 2)
+```
+
+<p>A simple density plot on the dataset shows that our dataset has 2 bumps (considering threshold density as 0.5 for significance), suggesting that these data might be coming from two different sources.</p>
+
+<p>For instance, there likely is a subpopulation with quality of 5 with some variance around this mean (red vertical line) and another population with a quality of 6 with again some variance around this mean (blue vertical line).</p>
+
+**Correlation Plot:**
+
+```{r}
+corrplot(cor(winequality))
+```
+
+<p>Since our aim to is cluster wine types by the descriptors, so we care about the columns which are influencing quality the most.As the heatmap suggest,residual sugar,pH and free sulphur dioxide factors are also not playing a really big role in the quality of wine.</p>
+
+**Histogram Analysis:**
+
+```{r}
+plot_num(winequality)
+```
+
+From the histograms, we observe that:
+
+1. The pH value seems to dispaly a normal distribution with major samples exhibiting values between 3.0 and 3.5.
+2. The free sulfur dioxide seems to be between the 1-72 count with peaking around 10 mark.
+3. The total sulfur dioxide seems to a have a spread between 0 and 175 and exhibiting peak around 50.
+4. The alcohol content seems to vary from 8 to 14 with major peaks around 10 with a lower count between 13 and 14.
+5. The fixed acidity, volatile acidity and density can almost be considered to be normally distributed.
+6. Majorly, the variables distributions are right-tailed.
+
+**Boxplot Analysis:**
+
+```{r}
+boxplot(scale(winequality),xlab="Value",ylab="Parameters",main="Boxplot Presentation of different Parameters")
+```
+
+<p>We have scaled all the values for boxplot analysis to bring them at similar scales and avoid overrepresntation of any independant parameter. A simple analysis of the boxplot shows that there are major outliers in residual sugar, chlorides and sulphates and minor outliers in citric acid. Overall, data distribution is approximately uniform except for quality which has values mostly in the higher range.</p>
+
+**Distribution Analysis of Different Physicochemical Factors:**
+
+```{r}
+winequality %>%
+  select(fixed.acidity, quality) %>%
+  group_by(quality)%>%
+  ggplot(mapping = aes(x = quality, y = fixed.acidity, color = quality))+
+  facet_wrap(~quality)+
+  geom_point()+
+  theme_minimal()
+```
+
+<p>Fixed acidity does not effect wine quality significantly, except for very low quality wines in which the fixed acidity content is significantly less.</p>
+
+```{r}
+winequality %>%
+  select(citric.acid, quality) %>%
+  group_by(quality)%>%
+  ggplot(mapping = aes(x = quality, y = citric.acid, color = quality))+
+  facet_wrap(~quality)+
+  geom_point()+
+  theme_minimal()
+```
+
+<p>Citric acid does not effect wine quality significantly as the distribution range is approximately uniform across all categories of quality.</p>
+
+```{r}
+winequality %>%
+  select(chlorides, quality) %>%
+  group_by(quality)%>%
+  ggplot(mapping = aes(x = quality, y = chlorides, color = quality))+
+  facet_wrap(~quality)+
+  geom_point()+
+  theme_minimal()
+```
+
+<p>Chloride content is significantly less in high quality wines.</p>
+
+```{r}
+winequality %>%
+  select(alcohol, quality) %>%
+  group_by(quality)%>%
+  ggplot(mapping = aes(x = quality, y = alcohol, color = quality))+
+  facet_wrap(~quality)+
+  geom_point()+
+  theme_minimal()
+```
+
+<p>Alcohol content does not significantly effect wine quality, except for low quality wine in which the alcohol content is significantly less.</p>
+
+</div>
+
+### Principal Component Analysis
+
+<div style="text-align: justify">
+
+<p>Since this a high dimension dataset, we will first use PCA to reduce the dataset dimension. The principal components are supplied with normalized version of original predictors. This is because, the original predictors may have different scales. Performing PCA on un-normalized variables will lead to insanely large loadings for variables with high variance. In turn, this will lead to dependence of a principal component on the variable with high variance. This is undesirable. </p>
+
+**Scaling the variables:**
+
+```{r}
+winequality <- scale(winequality)
+```
+
+**Performing PCA:**
+
+```{r}
+wine.pca <- prcomp(winequality)
+summary(wine.pca)
+```
+
+<p>As per the summary above (Importance of components); the first 8 PC's contribte to ~92% of the information required for the entire data. Hence the 13 components can be reduced to 8 for further analysis with 92% information. The other variables can be included in case we intend to have more accurate analysis/forcasting/prediction.</p>
+
+```{r}
+wine.pca
+biplot(wine.pca)
+```
+
+<p>From the PCA biplot, we observe that residual sugar, free sulphur dioxide and chlorides are not of much influence.</p>
+
+```{r}
+summary(winequality)
+```
+
+<p>Here we can see that we are dealing with an unbalanced dataset, wherein only 13.57% out of 1599 wines is considered as good wine.</p>
+
+<p>Next we will be using skim to obtain the outlook of the dataset, no.of observations, no.of columns, range of variables, no.of missing/unique values, histograms, etc.</p>
+
+```{r}
+winequality %>% skim %>% kable()
+```
+
+So we will remove the following variables from the dataset:
+
+- residual sugar
+- pH
+- free sulphur dioxide
+- chlorides
+
+```{r}
+winequality <- winequality[,c(1,2,3,7,8,10,11)]
+```
+
+<p>Also we can see that volatile acidity, alcohol and sulphates significantly determine wine quality.Creating a Plotly 3D interactive graph to analyze how these variables directly identify quality.</p>
+
+```{r}
+wq <- read.csv("E:/MSIS/Spring 2020/Flex 2/IS 7036/winequality-red.csv", h=T)
+
+wq %>% plot_ly(x = ~alcohol, y = ~volatile.acidity, z = ~sulphates, 
+                  color = ~quality, hoverinfo = 'text', colors = viridis(3),
+                  text = ~paste('Quality:', quality,
+                                '<br>Alcohol:', alcohol,
+                                '<br>Volatile Acidity:' , volatile.acidity,
+                                '<br>Sulphates:', sulphates))%>%
+                add_markers(opacity = 0.8) %>%
+                layout(title = "3D Scatter plot: Alcohol vs Volatile Aidity vs   Sulphates", annotations = list(yref='paper', xref='paper', y=1.05, x=1.1, text='Quality', showarrow=F),
+         scene = list(xaxis = list(title = 'Alcohol'),
+                      yaxis = list(title = 'Volatile Acidity'),
+                      zaxis = list(title = 'Sulphates')))
+```
+
+</div>
+
+### Unsupervised Learning Methods {.tabset .tabset-fade}
+
+<div style="text-align: justify">
+
+<p>The unsupervised learning methods that we have used are:</p>
+
+<ul>
+  <li>K-means Clustering</li>
+  <li>Hierarchical Clustering</li>
+  <li>Gaussian Mixture Model</li>
+  <li>DBSCAN</li>
+</ul>
+
+</div>
+
+#### K-means Clustering
+
+<div style="text-align: justify">
+
+**Distance Matrix:**
+
+```{r}
+distance <- get_dist(winequality)
+
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+```
+
+The data is standardised before clustering.
+
+```{r}
+winequality <- scale(winequality)
+```
+
+**Determining optimal number of clusters:** We need to determine the number of clusters for which the model is not overfitting but clusters the data as per the actual distribution using the Elbow Method. In elbow method, percentage of variance is explained as a function of the number of clusters plotted. This "elbow" cannot always be unambiguously identified. From the plot, where the sum of squares for number of clusters have been plotted from 1 to 12, we have chosen 6 as the number of clusters as the value of within groups sum of squares does not change significantly after 6.
+
+```{r}
+wss <- (nrow(winequality)-1)*sum(apply(winequality,2,var))
+
+for (i in 2:12) wss[i] <- sum(kmeans(winequality,
+                                     centers=i)$withinss)
+plot(1:12, wss, type="b", xlab="Number of Clusters",ylab="Within groups sum of squares")
+```
+
+**Running K-Means Clustering for 6 clusters:**
+
+```{r}
+k6_model <- kmeans(winequality, centers = 6, nstart = 25)
+fviz_cluster(k6_model, geom = c("point", "text"),  data = winequality) + ggtitle("Clustering with 6 groups")
+
+k6_model
+```
+
+**Dunn Index:**
+
+```{r}
+dunn_kmeans = dunn(clusters = k6_model$cluster, Data=winequality)
+dunn_kmeans
+```
+
+</div>
+
+#### Gaussian Mixture Model
+
+<div style="text-align: justify">
+**Why would you use a mixture model?**
+
+<p>From the density plot of our dataset, we have observed that our data is bi-modal, suggesting that the data might have been collected from two different sources.</p>
+
+<p>In fact, from the density plot, what we've done is a naive attempt at trying to group the data into subpopulations/clusters. But surely there must be some objective and "automatic" way of defining these clusters. This is where mixture models come in by providing a "model-based approach" to clustering through the use of statistical distributions. Here we will utilize an R package to perfom Gaussian mixture model clustering.</p>
+
+<p>The package mclust performs various types of model-based clustering and dimension reduction. Plus, it's really intuitive to use. It requires complete data (no missing), which is not an issue in our case since our dataset has no missing values.</p>
+
+<p>The dataset has also been standardize of all the indicators so when we plot the profiles it's clearer to see the differences between clusters.</p>
+
+```{r}
+BIC <- mclustBIC(winequality)
+```
+
+<p>We'll start by plotting Bayesian Information Criteria for all the models with profiles ranging from 1 to 9.</p>
+
+```{r}
+plot(BIC)
+```
+
+<p>It's not immediately clear which model is the best since the y-axis is so large and many of the models score close together. summary(BIC) shows the top three models based on BIC.</p>
+
+```{r}
+summary(BIC)
+```
+
+<p>There is not significant difference between the best BIC values. So, we will go with VEV,7 as the best fit between model complexity and efficiency. VEV,7 says there are 7 clusters with equal shape and ellipsodial distribution.</p>
+
+<p>If we want to look at this model more closely, we save it as an object and inspect it with summary().</p>
+
+```{r}
+mod_BIC <- Mclust(winequality, modelNames = "VEV", G = 7, x = BIC)
+summary(mod_BIC)
+```
+
+<p>The output describes the characteristics of the wine descriptors and the number of cases classified into each of the 7 clusters.</p>
+
+**Dunn Index:**
+
+```{r}
+dunn_BIC = dunn(clusters = mod_BIC$classification, Data=winequality)
+dunn_BIC
+```
+
+<p>BIC is one of the best fit indices, but it's always recommended to look for more evidence that the solution we've chosen is the correct one. So we have also compared values of the Integrated Completed Likelikood (ICL) criterion.</p>
+
+<p>ICL isn't much different from BIC, except that it adds a penalty on solutions with greater entropy or classification uncertainty.</p>
+
+```{r}
+ICL <- mclustICL(winequality)
+plot(ICL)
+summary(ICL)
+```
+
+<p>Similar to BIC model, there is no significant difference between the best ICL values. ICL suggests that model VEV4, VVV4 and VVV7 fits quite well. Here also we notice that there is no significant differences between the best ICL values. So, we will go with VEV,4 as the best model for GMM.</p>
+
+```{r}
+mod_ICL <- Mclust(winequality, modelNames = "VEV", G = 4, x = BIC)
+summary(mod_ICL)
+```
+
+**Dunn Index:**
+
+```{r}
+dunn_ICL = dunn(clusters = mod_ICL$classification, Data=winequality)
+dunn_ICL
+```
+
+<p>Classification, uncertainty and density plots illustrating which observations are assigned to each cluster and their level of assignment uncertainty.</p>
+
+```{r}
+plot(mod_BIC, what = 'classification')
+plot(mod_BIC, what = 'uncertainty')
+plot(mod_BIC, what = 'density')
+```
+
+</div>
+
+#### Hierarchical Clustering
+
+<div style="text-align: justify">
+<p>Hierarchical clustering is an alternative approach to k-means clustering for identifying groups in a data set. In contrast to k-means, hierarchical clustering will create a hierarchy of clusters and therefore does not require us to pre-specify the number of clusters. Furthermore, hierarchical clustering has an added advantage over k-means clustering in that its results can be easily visualized using an attractive tree-based representation called a dendrogram.</p>
+
+<p>While agglomerative clustering is good at identifying small clusters, Divisive hierarchical clustering, on the other hand, is better at identifying large clusters.</p>
+
+<p>There are multiple agglomeration methods to define clusters when performing a hierarchical cluster analysis; however, complete linkage and Ward's method are often preferred for AGNES clustering and we will be using them in our project.</p>
+
+**Calculate the distance matrix using Euclidean distance by default:**
+
+```{r}
+winequality.dist=dist(winequality)
+```
+
+**Obtain clusters using the Wards method:** Ward's minimum variance method minimizes the total within-cluster variance. At each step the pair of clusters with the smallest between-cluster distance are merged. It tends to produce more compact clusters.
+
+```{r}
+winequality.hclust.ward=hclust(winequality.dist, method="ward")
+plot(winequality.hclust.ward)
+```
+
+**Selecting optimal number of clusters:**
+
+```{r}
+fviz_nbclust(winequality, FUN = hcut, method = "wss")
+```
+
+The elbow method suggests 5 clusters. Hence, cutting the tree at 5 clusters.
+
+```{r warning = FALSE, message= FALSE}
+winequality.cuttree.ward <- cutree(winequality.hclust.ward, k = 5) 
+
+fviz_dend(winequality.hclust.ward,k = 5,cex = 0.5, k_colors = c( "#00AFBB", "#E7B800"),color_labels_by_k = TRUE, rect = TRUE, rect_border = c("#00AFBB", "#E7B800"),rect_fill = TRUE)
+```
+
+**Hierarchical clustering using Complete Linkage:**
+
+<p>The complete linkage method computes all pairwise dissimilarities between the elements in cluster 1 and the elements in cluster 2, and considers the largest value of these dissimilarities as the distance between the two clusters. It tends to produce more compact clusters.</p>
+
+```{r}
+winequality.hclust.complete <- hclust(winequality.dist, method = "complete")
+plot(winequality.hclust.complete )
+```
+
+**Cutting the tree at 5 clusters:**
+
+```{r warning=FALSE, message=FALSE}
+winequality.cuttree.complete= cutree(winequality.hclust.complete, k = 5)
+
+fviz_dend(winequality.hclust.complete,k = 5,
+          cex = 0.5, # label size
+          k_colors = c( "#00AFBB", "#E7B800"),
+          color_labels_by_k = TRUE, # color labels by groups
+          rect = TRUE, # Add rectangle around groups
+          rect_border = c("#00AFBB", "#E7B800"), 
+          rect_fill = TRUE)
+```
+
+<p>However, due to the size of the dataset, the dendrogram is not very legible. Consequently, we may want to zoom into one particular region or cluster. This allows us to see which observations are most similar within a particular group.</p>
+
+```{r}
+winequality[winequality.cuttree.ward==3,]
+```
+
+**Dunn Index:**
+
+```{r}
+dunn_complete = dunn(clusters = winequality.cuttree.complete, Data=winequality)
+dunn_complete
+
+dunn_ward = dunn(clusters = winequality.cuttree.ward, Data=winequality)
+dunn_ward
+```
+</div>
+
+#### DBSCAN
+
+<div style="text-align: justify">
+
+<p>Given that DBSCAN is a density based clustering algorithm, it does a great job of seeking areas in the data that have a high density of observations, versus areas of the data that are not very dense with observations. Another advantage of DBSCAN is that it can sort data into clusters of varying shapes.</p>
+
+<p>Due to the MinPts parameter, the single-link effect (different clusters being connected by a thin line of points) is reduced. DBSCAN has a notion of noise.</p>
+
+<p>The most common distance metric used in DBSCAN is Euclidean distance. Especially for high-dimensional data, this metric can be rendered almost useless due to the "Curse of dimensionality", making it difficult to find an appropriate value for epsilon. DBSCAN cannot cluster data sets well with large differences in densities, since the minPts-epsilon combination cannot then be chosen appropriately for all clusters.</p>
+
+```{r}
+db <- kNNdistplot(winequality, k = 8)
+abline(h = 2, col = "red", lty = 2)
+
+results <- dbscan(winequality, eps = 2, minPts = 2)
+results
+
+fviz_cluster(results, winequality, geom = "point")
+```
+
+**Dunn Index:**
+
+```{r}
+dunn_dbscan = dunn(clusters = results$cluster, Data=winequality)
+dunn_dbscan
+```
+
+</div>
+
+#### Cluster Analysis and Conclusion
+
+<div style="text-align: justify">
+
+**Comparing the clustering techniques based on Dunn Index:**
+
+```{r warning=FALSE, message=FALSE}
+model <-  factor(c("k-means", "Hierarchical_ward", "Hierarchical_complete", "GMM_BIC", "GMM_ICL", "DBSCAN"),
+               levels=c("k-means", "Hierarchical_ward", "Hierarchical_complete", "GMM_BIC", "GMM_ICL", "DBSCAN"))
+
+dunn_index <- c(dunn_kmeans,
+                dunn_BIC,
+                dunn_ICL,
+                dunn_ward,
+                dunn_complete,
+                dunn_dbscan
+)
+
+comparison_table <- data.frame(model=model,
+                               dunn = dunn_index)
+
+comparison_table$dunn <- round(comparison_table$dunn,2)
+
+kable(comparison_table)
+
+comparison_table1 <- gather(comparison_table, subset, dunn_index, 2:2)
+
+ggplot(comparison_table1, aes(x=model, y=dunn_index, group=subset, label=dunn_index)) +
+  geom_line(linetype="dashed", size=1.2)+
+  geom_point(size=3) +
+  geom_label(show_guide  = F) 
+```
+
+<p>Comparing the dunn index for all the clustering models, we see that DBSCAN gives the best results. This is as per our expectations since we have initially observed that this dataset has high density spikes and majority of the dataset falls in this density zone. This is followed by GMM models which also does a decent job in clustering since our data contains mixed sub-populations. Hierarchical and k-means clustering are the worst performing models for this dataset. Hierarchical clustering is not a suitable form of clustering for this dataset since it is a function of N^2 and N value is large for this dataset. K-means assumes the clusters as spherical, so it does not work well with non-linear datasets. Also, hard assignment in k-means often leads to mis-grouping thereby giving poor clustering results.</p>
+
+</div>
